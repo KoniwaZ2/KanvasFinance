@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+/* Token warna mengikuti docs/DESIGN.md. Jangan hardcode hex di komponen. */
+:root {
+  --surface: #f3f5ef;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eaeee4;
+  --border: #dce1d6;
+  --text-primary: #1e2a22;
+  --text-secondary: #57634f;
+  --brand-deep: #2f4a3b;
+  --brand-deep-hover: #263c30;
+  --brand-contrast: #f3f5ef;
+  --accent: #c1683b;
+  --accent-hover: #a8532e;
+  --accent-soft: #f6e4d9;
+  --success: #256b44;
+  --success-soft: #dfeee5;
+  --warning: #b8862e;
+  --warning-soft: #f7ecd6;
+  --danger: #b3402f;
+  --danger-soft: #f7dfda;
+  --info: #3a5f7d;
+  --info-soft: #e2eaf1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #141c17;
+    --surface-raised: #1c271f;
+    --surface-sunken: #101710;
+    --border: #2a362d;
+    --text-primary: #edf1e9;
+    --text-secondary: #a7b39e;
+    --brand-deep: #7fa98c;
+    --brand-deep-hover: #94baa0;
+    --brand-contrast: #10170f;
+    --accent: #e08a5a;
+    --accent-hover: #eb9d70;
+    --accent-soft: #33231a;
+    --success: #74c294;
+    --success-soft: #18291f;
+    --warning: #d9a548;
+    --warning-soft: #2e2617;
+    --danger: #e0685a;
+    --danger-soft: #331d19;
+    --info: #8fb4d1;
+    --info-soft: #1a242c;
+  }
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-line: var(--border);
+  --color-ink: var(--text-primary);
+  --color-ink-soft: var(--text-secondary);
+  --color-brand: var(--brand-deep);
+  --color-brand-hover: var(--brand-deep-hover);
+  --color-brand-contrast: var(--brand-contrast);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-outfit), var(--font-geist), ui-sans-serif, sans-serif;
+}
+
+body {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Radius tunggal untuk seluruh aplikasi: 12px kartu/input, full untuk tombol & badge. */
+@utility card-radius {
+  border-radius: 0.75rem;
+}
+
+/* Fokus keyboard yang konsisten dan kontras di kedua mode. */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

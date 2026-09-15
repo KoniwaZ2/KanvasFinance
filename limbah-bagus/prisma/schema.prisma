@@ -1,0 +1,244 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7: URL koneksi tidak lagi ditulis di sini, tapi di prisma.config.ts
+// untuk Migrate, dan lewat adapter di src/lib/db.ts untuk runtime.
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         String // TRADER | PROCESSOR | BUYER | ADMIN
+  createdAt    DateTime @default(now())
+
+  traderProfile    TraderProfile?
+  processorProfile ProcessorProfile?
+  orders           Order[]
+}
+
+model TraderProfile {
+  id              String @id @default(cuid())
+  userId          String @unique
+  businessName    String
+  marketName      String
+  address         String
+  dailyWasteEstKg Int
+
+  // Tujuan pencairan hasil penjualan sampah yang dibayar lewat QRIS.
+  // Kosong berarti pedagang baru bisa menerima pembayaran tunai.
+  payoutBankName      String?
+  payoutAccountNumber String?
+  payoutAccountName   String?
+
+  user     User           @relation(fields: [userId], references: [id])
+  listings WasteListing[]
+  payouts  Payout[]
+}
+
+model ProcessorProfile {
+  id               String  @id @default(cuid())
+  userId           String  @unique
+  unitName         String
+  location         String
+  capacityKgPerDay Int
+  description      String
+  // unit_bsf  : membeli sampah organik dari pedagang lalu mengolahnya
+  // peternak  : membudidayakan maggot dengan bahan baku sendiri
+  kind             String  @default("unit_bsf")
+  buysWaste        Boolean @default(true)
+
+  user      User            @relation(fields: [userId], references: [id])
+  products  Product[]
+  purchases WastePurchase[]
+}
+
+/**
+ * Tarif sampah organik yang ditetapkan pemerintah daerah.
+ *
+ * Harga dikunci per jenis sampah dan sama untuk semua pedagang: tidak ada
+ * tawar-menawar, tidak ada penjual yang bisa membanting harga. Pedagang hanya
+ * memilih jenis sampahnya, harga diambil dari tabel ini di sisi server.
+ */
+model WasteTariff {
+  id            String   @id // slug, mis. "sayur-buah"
+  name          String
+  description   String
+  pricePerKg    Int
+  regulationRef String // rujukan peraturan yang menetapkan harga
+  effectiveFrom DateTime @default(now())
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+
+  listings  WasteListing[]
+  purchases WastePurchase[]
+}
+
+/**
+ * Sampah organik yang ditawarkan pedagang untuk dijual.
+ * Harga tidak pernah disimpan di sini, selalu dibaca dari WasteTariff.
+ */
+model WasteListing {
+  id          String   @id @default(cuid())
+  traderId    String
+  tariffId    String
+  estimatedKg Int // perkiraan pedagang, masih akan ditimbang ulang saat dijemput
+  readyDate   DateTime
+  readyWindow String // pagi | siang | sore
+  note        String?
+  status      String   @default("open") // open | reserved | completed | cancelled | expired
+  createdAt   DateTime @default(now())
+
+  trader   TraderProfile  @relation(fields: [traderId], references: [id])
+  tariff   WasteTariff    @relation(fields: [tariffId], references: [id])
+  purchase WastePurchase?
+}
+
+/**
+ * Pembelian satu lot sampah oleh pengolah, sekaligus janji penjemputannya.
+ *
+ * Alur status:
+ *   scheduled  -> pengolah memesan lot, menyepakati tanggal jemput
+ *   weighed    -> sampah dijemput dan ditimbang ulang, nilai akhir terkunci
+ *   awaiting_cash_confirmation -> dibayar tunai, menunggu pedagang mengaku terima
+ *   paid       -> lunas, uang sudah di tangan pedagang atau dalam antrean pencairan
+ *   cancelled  -> batal sebelum penjemputan
+ */
+model WastePurchase {
+  id              String    @id @default(cuid())
+  listingId       String    @unique
+  processorId     String
+  tariffId        String
+  unitPricePerKg  Int // salinan tarif saat pemesanan, supaya perubahan tarif tidak mengubah transaksi lama
+  estimatedKg     Int
+  estimatedAmount Int
+  actualKg        Int?
+  finalAmount     Int?
+  // Biaya layanan platform, ditanggung pengolah di atas harga sampah supaya
+  // pedagang tetap menerima utuh sesuai tarif resmi.
+  platformFee     Int       @default(2000)
+  // collected  : ikut terpungut lewat QRIS
+  // outstanding: transaksi tunai, uangnya tidak lewat platform, ditagih berkala
+  feeStatus       String    @default("outstanding")
+  pickupDate      DateTime
+  status          String    @default("scheduled")
+  paymentMethod   String? // cash | qris
+  weighedAt       DateTime?
+  paidAt          DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  paymentId       String?   @unique
+  createdAt       DateTime  @default(now())
+
+  listing      WasteListing     @relation(fields: [listingId], references: [id])
+  processor    ProcessorProfile @relation(fields: [processorId], references: [id])
+  tariff       WasteTariff      @relation(fields: [tariffId], references: [id])
+  payment      Payment?         @relation(fields: [paymentId], references: [id])
+  payout       Payout?
+  impactRecord ImpactRecord?
+}
+
+/**
+ * Pencairan hasil penjualan sampah ke rekening pedagang.
+ *
+ * Hanya dibuat untuk pembayaran QRIS: uangnya singgah di akun platform dulu,
+ * lalu diteruskan ke rekening pedagang. Pembayaran tunai tidak lewat sini
+ * karena uangnya berpindah langsung di lokasi penjemputan.
+ */
+model Payout {
+  id            String    @id @default(cuid())
+  purchaseId    String    @unique
+  traderId      String
+  amount        Int
+  bankName      String
+  accountNumber String
+  accountName   String
+  status        String    @default("pending") // pending | settled | failed
+  scheduledAt   DateTime
+  settledAt     DateTime?
+  reference     String? // nomor referensi transfer dari penyedia disbursement
+  failureReason String?
+  createdAt     DateTime  @default(now())
+
+  purchase WastePurchase @relation(fields: [purchaseId], references: [id])
+  trader   TraderProfile @relation(fields: [traderId], references: [id])
+}
+
+model Product {
+  id                   String  @id @default(cuid())
+  slug                 String  @unique
+  processorId          String
+  name                 String
+  type                 String // maggot_kering | maggot_segar | pupuk_kasgot
+  pricePerKg           Int
+  referenceMarketPrice Int? // harga pakan pabrikan pembanding, untuk klaim selisih harga
+  stockKg              Int
+  description          String
+  proteinContentPct    Int?
+  imageUrl             String?
+  isActive             Boolean @default(true)
+
+  processor  ProcessorProfile @relation(fields: [processorId], references: [id])
+  orderItems OrderItem[]
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  buyerId         String
+  status          String   @default("awaiting_payment") // awaiting_payment | paid | fulfilled | cancelled
+  totalAmount     Int
+  deliveryAddress String
+  recipientName   String
+  recipientPhone  String
+  paymentId       String?  @unique
+  createdAt       DateTime @default(now())
+
+  buyer   User        @relation(fields: [buyerId], references: [id])
+  payment Payment?    @relation(fields: [paymentId], references: [id])
+  items   OrderItem[]
+}
+
+model OrderItem {
+  id         String @id @default(cuid())
+  orderId    String
+  productId  String
+  quantityKg Int
+  unitPrice  Int
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model Payment {
+  id              String    @id @default(cuid())
+  midtransOrderId String    @unique
+  purpose         String // WASTE_PURCHASE | ORDER
+  status          String    @default("PENDING") // PENDING | SETTLEMENT | EXPIRE | CANCEL | DENY | REFUND
+  grossAmount     Int
+  method          String?
+  qrisUrl         String? // gambar QR dari Midtrans, untuk ditampilkan di halaman
+  qrString        String? // isi mentah kode QR, disimpan untuk audit
+  expiryAt        DateTime?
+  paidAt          DateTime?
+  rawNotification String? // payload notifikasi terakhir dari Midtrans, untuk audit
+  lastCheckedAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  order    Order?
+  purchase WastePurchase?
+}
+
+model ImpactRecord {
+  id         String   @id @default(cuid())
+  purchaseId String   @unique
+  wasteKg    Int
+  recordedAt DateTime @default(now())
+
+  purchase WastePurchase @relation(fields: [purchaseId], references: [id])
+}
