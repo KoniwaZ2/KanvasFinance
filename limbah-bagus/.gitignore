@@ -38,14 +38,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-
-
 *docs
-# env files (SECRETS - jangan pernah di-commit)
-.env
-.env.*
-!.env.example
-
-# local database
-*.db
-*.db-journal
